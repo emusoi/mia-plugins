@@ -15,7 +15,7 @@ const manifest = `{
   "protocol": 1,
   "help": "coding agents in your worktrees, and which of them is waiting on you",
   "verbs": [
-    {"name": "agent", "usage": "mia agent [ls|run [worktree] [--task <text>] [agent]|attach [worktree] [window]|send [worktree] [window] -- <text>|stop [worktree] [window]|hooks <install|uninstall>]", "help": "start an agent in a worktree's session, and see which agents are working, waiting or finished"}
+    {"name": "agent", "usage": "mia agent [ls [--all]|run [worktree] [--task <text>] [agent]|attach [worktree] [window]|attach <session:window>|send [worktree] [window] -- <text>|stop [worktree] [window]|hooks <install|uninstall>]", "help": "start an agent in a worktree's session, and see which agents are working, waiting or finished"}
   ],
   "rows": {"every": "3s"},
   "serve": true,
@@ -28,7 +28,9 @@ const manifest = `{
     {"id": "run", "key": "A", "label": "start an agent", "verb": "agent", "args": ["run", "{row}"], "report": true,
      "help": "start the default agent in a new window of the worktree's session"},
     {"id": "attach", "key": "w", "label": "go to the agent", "verb": "agent", "args": ["attach", "{row}"], "lands": true,
-     "help": "land in the worktree's agent window; a finished agent counts as seen"}
+     "help": "land in the worktree's agent window; a finished agent counts as seen"},
+    {"id": "everywhere", "key": "@", "label": "agents everywhere", "panel": "everywhere", "global": true,
+     "help": "every agent in every tmux session on this machine, mia's or not; ⏎ lands in one"}
   ]
 }`
 
@@ -70,6 +72,12 @@ func main() {
 		err = p.rowsVerb(os.Stdin, os.Stdout)
 	case "serve":
 		err = p.serve(os.Stdin, os.Stdout)
+	case "panel":
+		if len(os.Args) < 3 || os.Args[2] != "everywhere" {
+			fmt.Fprintln(os.Stderr, "mia-agent: the only panel is everywhere")
+			os.Exit(64)
+		}
+		err = writeJSON(p.everywherePanel())
 	default:
 		fmt.Fprintf(os.Stderr, "mia-agent: no %q\n", os.Args[1])
 		os.Exit(64)
@@ -116,6 +124,9 @@ func (p plugin) verb(args []string) error {
 	case "run":
 		return p.run(args)
 	case "attach":
+		if len(args) == 1 && strings.Contains(args[0], ":") {
+			return attachTarget(args[0])
+		}
 		wt, window, _, err := p.aim(args)
 		if err != nil {
 			return err
@@ -142,16 +153,26 @@ func (p plugin) verb(args []string) error {
 }
 
 func (p plugin) list(args []string) error {
-	asJSON := len(args) == 1 && args[0] == "--json"
-	if len(args) > 0 && !asJSON {
-		return errors.New("usage: mia agent ls [--json]")
+	asJSON, everywhere := false, false
+	for _, arg := range args {
+		switch arg {
+		case "--json":
+			asJSON = true
+		case "--all":
+			everywhere = true
+		default:
+			return errors.New("usage: mia agent ls [--all] [--json]")
+		}
+	}
+	if everywhere {
+		return p.listEverywhere(asJSON)
 	}
 	all, err := p.everyAgent()
 	if err != nil {
 		return err
 	}
 	if asJSON {
-		return json.NewEncoder(os.Stdout).Encode(all)
+		return writeJSON(all)
 	}
 	if len(all) == 0 {
 		fmt.Println("no agents — `mia agent run` starts one")
@@ -263,13 +284,17 @@ func (p plugin) aim(args []string) (wt, window, text string, err error) {
 	case 0:
 		return "", "", "", fmt.Errorf("%s has no agent — `mia agent run %s`", wt, wt)
 	case 1:
-		return wt, agents[0].Window, text, nil
+		return wt, fmt.Sprint(agents[0].Index), text, nil
 	}
 	names := make([]string, len(agents))
 	for i, a := range agents {
 		names[i] = a.Window
 	}
 	return "", "", "", fmt.Errorf("%s has %d agents (%s) — name one", wt, len(agents), strings.Join(names, ", "))
+}
+
+func writeJSON(v any) error {
+	return json.NewEncoder(os.Stdout).Encode(v)
 }
 
 func indexOf(args []string, want string) int {

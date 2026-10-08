@@ -33,7 +33,11 @@ Coding agents in your worktrees. `mia agent run [worktree] [--task <text>]
 [agent]` starts one in a new window of the worktree's session; `mia agent ls`
 shows every agent and whether it is working, waiting on you, finished or
 idle, read from its screen. `attach`, `send -- <text>` and `stop` take a
-worktree and, when it has more than one agent, a window. Needs mia-core with
+worktree and, when it has more than one agent, a window. An agent is found by
+its process, so one you started by hand in any window counts too.
+`mia agent ls --all` lists every agent in every tmux session on this machine,
+mia's or not, and `mia agent attach <session:window>` lands in any of them; `@`
+on the dashboard shows the same list, ⏎ to land. Needs mia-core with
 `mia window read` and `send`.
 
     make build

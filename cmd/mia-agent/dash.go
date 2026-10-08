@@ -36,6 +36,7 @@ var looks = map[string]struct{ glyph, section string }{
 
 func (p plugin) rows(input rowsInput) map[string]rowInfo {
 	answer := map[string]rowInfo{}
+	table := loadProcs()
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 	for _, wt := range input.Worktrees {
@@ -44,7 +45,7 @@ func (p plugin) rows(input rowsInput) map[string]rowInfo {
 		}
 		var mine []window
 		for _, w := range wt.Windows {
-			if p.isAgentWindow(w) {
+			if p.isAgentWindow(w, table) {
 				mine = append(mine, w)
 			}
 		}
@@ -54,7 +55,7 @@ func (p plugin) rows(input rowsInput) map[string]rowInfo {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			info, ok := summarise(p.agentsFrom(wt.Name, mine))
+			info, ok := summarise(p.agentsFrom(wt.Name, mine, table))
 			if ok {
 				mu.Lock()
 				answer[wt.Name] = info
@@ -137,6 +138,8 @@ func (p plugin) serve(in io.Reader, out io.Writer) error {
 				continue
 			}
 			send(rpc{ID: request.ID, Result: map[string]any{"rows": p.rows(input)}})
+		case "panel":
+			send(rpc{ID: request.ID, Result: p.everywherePanel()})
 		default:
 			send(rpc{ID: request.ID, Error: &rpcError{Code: -32601, Message: "no " + request.Method}})
 		}

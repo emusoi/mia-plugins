@@ -12,12 +12,14 @@ type window struct {
 	Index   int    `json:"index"`
 	Name    string `json:"name"`
 	Command string `json:"command"`
+	PID     int    `json:"pid,omitempty"`
 	Quiet   string `json:"quiet"`
 }
 
 type agent struct {
 	Worktree string `json:"worktree"`
 	Window   string `json:"window"`
+	Index    int    `json:"index"`
 	State    string `json:"state"`
 	Quiet    string `json:"quiet"`
 }
@@ -47,14 +49,9 @@ func windowsOf(wt string) ([]window, error) {
 	return windows, nil
 }
 
-func (p plugin) isAgentWindow(w window) bool {
+func (p plugin) isAgentWindow(w window, table procs) bool {
 	base, _, _ := strings.Cut(w.Name, "-")
-	for _, a := range p.settings.Agents {
-		if base == a || w.Command == p.bin(a) {
-			return true
-		}
-	}
-	return false
+	return p.isAgent(base) || table.agentAt(w.PID, p.bins()) != ""
 }
 
 func (p plugin) agentsIn(wt string) ([]agent, error) {
@@ -62,17 +59,19 @@ func (p plugin) agentsIn(wt string) ([]agent, error) {
 	if err != nil {
 		return nil, err
 	}
-	return p.agentsFrom(wt, windows), nil
+	return p.agentsFrom(wt, windows, loadProcs()), nil
 }
 
-func (p plugin) agentsFrom(wt string, windows []window) []agent {
+func (p plugin) agentsFrom(wt string, windows []window, table procs) []agent {
 	remembered := p.recall()
 	changed := false
 	var found []agent
+	var mine []window
 	for _, w := range windows {
-		if !p.isAgentWindow(w) {
+		if !p.isAgentWindow(w, table) {
 			continue
 		}
+		mine = append(mine, w)
 		screen, _ := miaOutput("window", "read", wt, fmt.Sprint(w.Index))
 		key := wt + "\x00" + w.Name
 		before := remembered[key]
@@ -89,10 +88,10 @@ func (p plugin) agentsFrom(wt string, windows []window) []agent {
 		if seen == waiting {
 			state = waiting
 		}
-		found = append(found, agent{Worktree: wt, Window: w.Name, State: state, Quiet: short(w.Quiet)})
+		found = append(found, agent{Worktree: wt, Window: w.Name, Index: w.Index, State: state, Quiet: short(w.Quiet)})
 	}
 	live := map[string]bool{}
-	for _, w := range windows {
+	for _, w := range mine {
 		live[wt+"\x00"+w.Name] = true
 	}
 	for key := range remembered {
@@ -126,13 +125,14 @@ func (p plugin) everyAgent() ([]agent, error) {
 	if err := json.Unmarshal(out, &worktrees); err != nil {
 		return nil, fmt.Errorf("mia api worktrees: %w", err)
 	}
+	table := loadProcs()
 	var all []agent
 	for _, wt := range worktrees {
-		agents, err := p.agentsIn(wt.Name)
+		windows, err := windowsOf(wt.Name)
 		if err != nil {
 			continue
 		}
-		all = append(all, agents...)
+		all = append(all, p.agentsFrom(wt.Name, windows, table)...)
 	}
 	return all, nil
 }

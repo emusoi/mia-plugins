@@ -158,3 +158,21 @@ func TestThenRunsTheNextNotifierWithThePayload(t *testing.T) {
 		t.Errorf("no --then: rest %q then %q", rest, then)
 	}
 }
+
+func TestAnAgentIsFoundByItsProcessUnderTheShell(t *testing.T) {
+	table := parseProcs(`
+  100     1 /bin/zsh -l
+  101   100 claude
+  102   101 /usr/bin/python3 mcp-server.py
+  200     1 /bin/zsh -l
+  201   200 node /opt/homebrew/bin/codex --full-auto
+  300     1 /bin/zsh -l
+  301   300 vim claude.md
+`)
+	bins := map[string]string{"claude": "claude", "codex": "codex"}
+	for pid, want := range map[int]string{100: "claude", 101: "claude", 200: "codex", 300: "", 0: ""} {
+		if got := table.agentAt(pid, bins); got != want {
+			t.Errorf("agentAt(%d) = %q, want %q", pid, got, want)
+		}
+	}
+}
