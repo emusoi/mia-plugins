@@ -134,3 +134,27 @@ func TestTheMostUrgentAgentNamesTheRow(t *testing.T) {
 		t.Errorf("an idle agent claims the row: %+v", info)
 	}
 }
+
+func TestThenRunsTheNextNotifierWithThePayload(t *testing.T) {
+	rest, then, err := splitThen([]string{"codex", "--then", `["/bin/sh", "-c", "printf %s \"$0\" > \"$OUT\""]`, `{"type":"agent-turn-complete"}`})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rest) != 2 || rest[0] != "codex" || len(then) != 3 {
+		t.Fatalf("rest %q then %q", rest, then)
+	}
+	out := filepath.Join(t.TempDir(), "got")
+	t.Setenv("OUT", out)
+	if err := runThen(then, rest); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := os.ReadFile(out); string(got) != `{"type":"agent-turn-complete"}` {
+		t.Errorf("next notifier got %q", got)
+	}
+	if _, _, err := splitThen([]string{"codex", "--then", "not json"}); err == nil {
+		t.Error("a --then that is not a JSON list was accepted")
+	}
+	if rest, then, _ := splitThen([]string{"claude"}); len(then) != 0 || len(rest) != 1 {
+		t.Errorf("no --then: rest %q then %q", rest, then)
+	}
+}

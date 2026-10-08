@@ -15,7 +15,59 @@ const hookCommand = "mia agent hook"
 
 var claudeEvents = []string{"UserPromptSubmit", "PostToolUse", "Notification", "Stop", "SessionEnd"}
 
+func splitThen(args []string) ([]string, []string, error) {
+	for i, arg := range args {
+		if arg != "--then" {
+			continue
+		}
+		if i+1 >= len(args) {
+			return nil, nil, errors.New("--then needs a JSON list: --then '[\"program\", \"arg\"]'")
+		}
+		var then []string
+		if err := json.Unmarshal([]byte(args[i+1]), &then); err != nil || len(then) == 0 {
+			return nil, nil, fmt.Errorf("--then %q is not a JSON list of a program and its arguments", args[i+1])
+		}
+		return append(append([]string{}, args[:i]...), args[i+2:]...), then, nil
+	}
+	return args, nil, nil
+}
+
+func runThen(then, rest []string) error {
+	if len(then) == 0 {
+		return nil
+	}
+	argv := append([]string{}, then[1:]...)
+	if len(rest) > 1 {
+		argv = append(argv, rest[len(rest)-1])
+	}
+	cmd := exec.Command(then[0], argv...)
+	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
+	return cmd.Run()
+}
+
+func directHook(args []string) error {
+	rest, then, err := splitThen(args)
+	if err != nil {
+		return err
+	}
+	record := exec.Command("mia", append([]string{"agent", "hook"}, rest...)...)
+	record.Stdin = os.Stdin
+	_ = record.Run()
+	return runThen(then, rest)
+}
+
 func (p plugin) hook(args []string, stdin io.Reader) error {
+	args, then, err := splitThen(args)
+	if err != nil {
+		return err
+	}
+	if err := p.record(args, stdin); err != nil {
+		fmt.Fprintf(os.Stderr, "mia: %v\n", err)
+	}
+	return runThen(then, args)
+}
+
+func (p plugin) record(args []string, stdin io.Reader) error {
 	if len(args) == 0 {
 		return errors.New("usage: mia agent hook <claude|codex>")
 	}

@@ -53,6 +53,12 @@ func main() {
 		fmt.Println(manifest)
 		return
 	}
+	if os.Args[1] == "hook" {
+		if err := directHook(os.Args[2:]); err != nil {
+			fail(err)
+		}
+		return
+	}
 	p, err := load()
 	if err != nil {
 		fail(err)

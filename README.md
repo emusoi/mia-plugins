@@ -47,7 +47,11 @@ plugin runs as `mia-agent serve` and redraws it the moment a hook reports.
 Reading the screen can miss a short burst of work. `mia agent hooks install`
 has Claude Code report its own state instead (prompt, tool use, a permission
 question, done) through hooks in `~/.claude/settings.json`, and prints the
-`notify` line that does the same for codex. `uninstall` removes only mia's
+`notify` line that does the same for codex. If codex already has a
+`notify`, chain it: `["~/.config/mia/plugins/mia-agent", "hook", "codex",
+"--then", "<the old notify as a JSON list>"]`. Called directly like this, the
+plugin records what it can, even outside a repository, and always runs the
+next one with codex's payload. `uninstall` removes only mia's
 hooks.
 
 Settings:
