@@ -15,7 +15,7 @@ const manifest = `{
   "protocol": 1,
   "help": "coding agents in your worktrees, and which of them is waiting on you",
   "verbs": [
-    {"name": "agent", "usage": "mia agent [ls|run [worktree] [--task <text>] [agent]|attach [worktree] [window]|send [worktree] [window] -- <text>|stop [worktree] [window]]", "help": "start an agent in a worktree's session, and see which agents are working, waiting or finished"}
+    {"name": "agent", "usage": "mia agent [ls|run [worktree] [--task <text>] [agent]|attach [worktree] [window]|send [worktree] [window] -- <text>|stop [worktree] [window]|hooks <install|uninstall>]", "help": "start an agent in a worktree's session, and see which agents are working, waiting or finished"}
   ]
 }`
 
@@ -79,13 +79,17 @@ func (p plugin) verb(args []string) error {
 	sub := "ls"
 	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
 		switch args[0] {
-		case "ls", "run", "attach", "send", "stop":
+		case "ls", "run", "attach", "send", "stop", "hook", "hooks":
 			sub, args = args[0], args[1:]
 		}
 	}
 	switch sub {
 	case "ls":
 		return p.list(args)
+	case "hook":
+		return p.hook(args, os.Stdin)
+	case "hooks":
+		return p.hooks(args)
 	case "run":
 		return p.run(args)
 	case "attach":

@@ -32,6 +32,7 @@ const (
 type memory struct {
 	Last     string `json:"last"`
 	Finished bool   `json:"finished,omitempty"`
+	Hooked   bool   `json:"hooked,omitempty"`
 }
 
 func windowsOf(wt string) ([]window, error) {
@@ -71,12 +72,20 @@ func (p plugin) agentsIn(wt string) ([]agent, error) {
 		screen, _ := miaOutput("window", "read", wt, fmt.Sprint(w.Index))
 		key := wt + "\x00" + w.Name
 		before := remembered[key]
-		now := settle(before, classify(string(screen)))
+		seen := classify(string(screen))
+		now := before
+		if !before.Hooked {
+			now = settle(before, seen)
+		}
 		if now != before {
 			remembered[key] = now
 			changed = true
 		}
-		found = append(found, agent{Worktree: wt, Window: w.Name, State: shown(now), Quiet: short(w.Quiet)})
+		state := shown(now)
+		if seen == waiting {
+			state = waiting
+		}
+		found = append(found, agent{Worktree: wt, Window: w.Name, State: state, Quiet: short(w.Quiet)})
 	}
 	if changed {
 		p.remember(remembered)
