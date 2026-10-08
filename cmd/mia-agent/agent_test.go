@@ -121,3 +121,16 @@ func TestClaudeHooksInstallTwiceAndUninstallKeepTheirs(t *testing.T) {
 		t.Fatalf("after uninstall: %+v", settings.Hooks)
 	}
 }
+
+func TestTheMostUrgentAgentNamesTheRow(t *testing.T) {
+	info, ok := summarise([]agent{
+		{Window: "claude", State: working, Quiet: "now"},
+		{Window: "codex", State: waiting, Quiet: "4m"},
+	})
+	if !ok || info.Section != "waiting" || info.Status != "● waiting 4m" || len(info.Facts) != 2 {
+		t.Fatalf("summarise = %+v", info)
+	}
+	if info, _ := summarise([]agent{{Window: "claude", State: idle}}); info.Section != "" || info.Status != "" {
+		t.Errorf("an idle agent claims the row: %+v", info)
+	}
+}

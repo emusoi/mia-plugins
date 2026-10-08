@@ -39,6 +39,11 @@ worktree and, when it has more than one agent, a window. Needs mia-core with
     make build
     ln -s "$PWD/bin/mia-agent" ~/.config/mia/plugins/mia-agent && mia plugin enable agent
 
+On the dashboard, a worktree whose agent is waiting moves to *waiting on
+you* at the top, then *finished*, then *agents working*. `A` starts an agent
+on the selected row, `w` lands in its window. While the dashboard is open the
+plugin runs as `mia-agent serve` and redraws it the moment a hook reports.
+
 Reading the screen can miss a short burst of work. `mia agent hooks install`
 has Claude Code report its own state instead (prompt, tool use, a permission
 question, done) through hooks in `~/.claude/settings.json`, and prints the

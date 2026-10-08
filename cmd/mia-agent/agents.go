@@ -62,6 +62,10 @@ func (p plugin) agentsIn(wt string) ([]agent, error) {
 	if err != nil {
 		return nil, err
 	}
+	return p.agentsFrom(wt, windows), nil
+}
+
+func (p plugin) agentsFrom(wt string, windows []window) []agent {
 	remembered := p.recall()
 	changed := false
 	var found []agent
@@ -87,10 +91,28 @@ func (p plugin) agentsIn(wt string) ([]agent, error) {
 		}
 		found = append(found, agent{Worktree: wt, Window: w.Name, State: state, Quiet: short(w.Quiet)})
 	}
+	live := map[string]bool{}
+	for _, w := range windows {
+		live[wt+"\x00"+w.Name] = true
+	}
+	for key := range remembered {
+		if strings.HasPrefix(key, wt+"\x00") && !live[key] {
+			delete(remembered, key)
+			changed = true
+		}
+	}
 	if changed {
 		p.remember(remembered)
 	}
-	return found, nil
+	return found
+}
+
+func (p plugin) forget(wt, window string) {
+	remembered := p.recall()
+	if _, ok := remembered[wt+"\x00"+window]; ok {
+		delete(remembered, wt+"\x00"+window)
+		p.remember(remembered)
+	}
 }
 
 func (p plugin) everyAgent() ([]agent, error) {

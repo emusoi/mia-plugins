@@ -16,6 +16,19 @@ const manifest = `{
   "help": "coding agents in your worktrees, and which of them is waiting on you",
   "verbs": [
     {"name": "agent", "usage": "mia agent [ls|run [worktree] [--task <text>] [agent]|attach [worktree] [window]|send [worktree] [window] -- <text>|stop [worktree] [window]|hooks <install|uninstall>]", "help": "start an agent in a worktree's session, and see which agents are working, waiting or finished"}
+  ],
+  "rows": {"every": "3s"},
+  "serve": true,
+  "sections": [
+    {"id": "waiting", "label": "waiting on you", "rank": 5},
+    {"id": "finished", "label": "finished", "rank": 7},
+    {"id": "working", "label": "agents working", "rank": 20}
+  ],
+  "keys": [
+    {"id": "run", "key": "A", "label": "start an agent", "verb": "agent", "args": ["run", "{row}"], "report": true,
+     "help": "start the default agent in a new window of the worktree's session"},
+    {"id": "attach", "key": "w", "label": "go to the agent", "verb": "agent", "args": ["attach", "{row}"], "lands": true,
+     "help": "land in the worktree's agent window; a finished agent counts as seen"}
   ]
 }`
 
@@ -47,6 +60,10 @@ func main() {
 	switch os.Args[1] {
 	case "agent":
 		err = p.verb(os.Args[2:])
+	case "rows":
+		err = p.rowsVerb(os.Stdin, os.Stdout)
+	case "serve":
+		err = p.serve(os.Stdin, os.Stdout)
 	default:
 		fmt.Fprintf(os.Stderr, "mia-agent: no %q\n", os.Args[1])
 		os.Exit(64)
@@ -172,6 +189,7 @@ func (p plugin) run(args []string) error {
 		return err
 	}
 	window := freeName(agent, windows)
+	p.forget(wt, window)
 	argv := []string{"mia", "window", "new", wt, window, "--", p.bin(agent)}
 	if task != "" {
 		argv = append(argv, task)
