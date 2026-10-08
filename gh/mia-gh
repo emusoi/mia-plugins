@@ -1,0 +1,46 @@
+#!/bin/sh
+# mia-gh: each worktree's pull request on the dashboard, from gh. Needs gh and jq.
+set -eu
+gh=${MIA_GH:-gh}
+
+case "${1:-}" in
+manifest)
+	cat <<'JSON'
+{
+  "protocol": 1,
+  "help": "each worktree's pull request, from gh",
+  "verbs": [{"name": "gh-open", "usage": "mia gh-open [worktree]", "help": "open the worktree's pull request in the browser"}],
+  "rows": {"every": "60s"},
+  "sections": [{"id": "review", "label": "in review", "rank": 20}],
+  "tabs": [{"id": "pr", "label": "pr"}],
+  "keys": [{"id": "open", "key": "O", "label": "open the PR", "verb": "gh-open", "args": ["{row}"],
+            "help": "the worktree's pull request, in the browser"}]
+}
+JSON
+	;;
+rows)
+	prs=$(cd "$MIA_REPO" && $gh pr list --state all --limit 200 \
+		--json number,headRefName,state,isDraft,reviewDecision,title,url)
+	jq -c --argjson prs "$prs" '
+	  {rows: (reduce (.worktrees[] | select(.branch and (.main | not))) as $w ({};
+	    ([$prs[] | select(.headRefName == $w.branch)] | sort_by(.number) | last) as $pr
+	    | if $pr == null then . else . + {($w.name): ({
+	        status: ("#\($pr.number) " + (if $pr.isDraft then "draft" else ($pr.state | ascii_downcase) end)),
+	        facts: ["pr      #\($pr.number) \($pr.title)"],
+	        tabs: {pr: [
+	          "#\($pr.number) \($pr.title)",
+	          "state   \($pr.state | ascii_downcase)\(if $pr.isDraft then " · draft" else "" end)",
+	          "review  \($pr.reviewDecision // "none" | ascii_downcase)",
+	          $pr.url]}
+	      } + (if $pr.state == "OPEN" and ($pr.isDraft | not) then {section: "review"} else {} end))} end))}'
+	;;
+gh-open)
+	target=${2:-${MIA_WORKTREE:-}}
+	if [ -n "$target" ]; then dir=$(mia path "$target"); else dir=$(mia path); fi
+	cd "$dir" && exec $gh pr view --web
+	;;
+*)
+	echo "mia-gh: no command ${1:-} — it is a mia plugin: \`mia plugin enable gh\`" >&2
+	exit 64
+	;;
+esac

@@ -1,0 +1,39 @@
+#!/bin/sh
+# mia-notify: a desktop notification when something happens in a worktree.
+# Needs jq; notifies with osascript on a Mac, notify-send elsewhere, or the
+# command in [plugin.notify] command, which gets the title and the message.
+set -eu
+
+case "${1:-}" in
+manifest)
+	echo '{"protocol":1,"help":"desktop notifications for what happens in your worktrees","events":["*"]}'
+	;;
+event)
+	payload=$(cat)
+	config=${MIA_PLUGIN_CONFIG:-"{}"}
+	wanted=$(printf '%s' "$config" | jq -r '.events // [] | join(" ")')
+	if [ -n "$wanted" ]; then
+		case " $wanted " in *" $2 "*) ;; *) exit 0 ;; esac
+	fi
+	message=$(printf '%s' "$payload" | jq -r '
+	  .worktree as $w
+	  | {"worktree.created": "\($w) is new", "worktree.removed": "\($w) is gone",
+	     "session.started": "\($w) has a session", "env.up": "\($w)'"'"'s environment is up",
+	     "env.down": "\($w)'"'"'s environment is down",
+	     "stack.changed": "\($w)'"'"'s stack: \(.detail.change // "changed")"}[.event] // "\(.event) in \($w)"')
+	title="mia · $(basename "$(printf '%s' "$payload" | jq -r .repo)")"
+	command=$(printf '%s' "$config" | jq -r '.command // empty')
+	if [ -n "$command" ]; then
+		exec $command "$title" "$message"
+	elif command -v osascript >/dev/null 2>&1; then
+		exec osascript -e 'on run argv' -e 'display notification (item 2 of argv) with title (item 1 of argv)' -e 'end run' "$title" "$message"
+	elif command -v notify-send >/dev/null 2>&1; then
+		exec notify-send "$title" "$message"
+	fi
+	echo "$title: $message"
+	;;
+*)
+	echo "mia-notify: no command ${1:-} — it is a mia plugin: \`mia plugin enable notify\`" >&2
+	exit 64
+	;;
+esac
