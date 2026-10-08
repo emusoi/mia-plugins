@@ -1,6 +1,6 @@
 # mia-plugins
 
-Private. The plugins that sit on top of [mia-core](https://github.com/emusoi/mia-core).
+The plugins that sit on top of [mia-core](https://github.com/emusoi/mia-core).
 None of them is needed to use mia; each does nothing until `mia plugin enable <name>`.
 Nothing here is installed by default.
 
