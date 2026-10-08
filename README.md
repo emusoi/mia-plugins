@@ -27,6 +27,20 @@ Records stay where mia-core kept them, under `.git/mia/plans`, `evidence` and
 `lessons`, so existing plans read as they are. Checks run through
 `mia env run`, inside the environment when one is up.
 
+## mia-dev
+
+Lend the main checkout's already-running dev server a worktree's files,
+uncommitted work included, without a container. `mia dev <worktree>` puts
+main's own changes aside in a stash and copies the worktree's tracked and
+untracked files over main; ignored files (`node_modules`, `.env`) stay as
+they are. `--follow` keeps copying every second. `mia dev off` gives main its
+own files back. `v` on a dashboard row does the same.
+
+    make build
+    ln -s "$PWD/bin/mia-dev" ~/.config/mia/plugins/mia-dev && mia plugin enable dev
+
+Don't commit in main while it is lent: `mia dev off` resets it.
+
 ## mia-gh (example, shell)
 
 Each worktree's pull request on the dashboard: a status, a `pr` tab, an
