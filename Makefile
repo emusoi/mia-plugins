@@ -3,6 +3,7 @@
 build:
 	go build -o bin/mia-plan ./cmd/mia-plan
 	go build -o bin/mia-dev ./cmd/mia-dev
+	go build -o bin/mia-agent ./cmd/mia-agent
 
 test: build
 	go test ./...

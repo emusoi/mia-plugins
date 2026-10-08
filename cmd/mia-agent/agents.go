@@ -1,0 +1,200 @@
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+	"strings"
+	"time"
+)
+
+type window struct {
+	Index   int    `json:"index"`
+	Name    string `json:"name"`
+	Command string `json:"command"`
+	Quiet   string `json:"quiet"`
+}
+
+type agent struct {
+	Worktree string `json:"worktree"`
+	Window   string `json:"window"`
+	State    string `json:"state"`
+	Quiet    string `json:"quiet"`
+}
+
+const (
+	working  = "working"
+	waiting  = "waiting"
+	finished = "finished"
+	idle     = "idle"
+)
+
+type memory struct {
+	Last     string `json:"last"`
+	Finished bool   `json:"finished,omitempty"`
+}
+
+func windowsOf(wt string) ([]window, error) {
+	out, err := miaOutput("window", "ls", wt, "--json")
+	if err != nil {
+		return nil, err
+	}
+	var windows []window
+	if err := json.Unmarshal(out, &windows); err != nil {
+		return nil, fmt.Errorf("mia window ls: %w", err)
+	}
+	return windows, nil
+}
+
+func (p plugin) isAgentWindow(w window) bool {
+	base, _, _ := strings.Cut(w.Name, "-")
+	for _, a := range p.settings.Agents {
+		if base == a || w.Command == p.bin(a) {
+			return true
+		}
+	}
+	return false
+}
+
+func (p plugin) agentsIn(wt string) ([]agent, error) {
+	windows, err := windowsOf(wt)
+	if err != nil {
+		return nil, err
+	}
+	remembered := p.recall()
+	changed := false
+	var found []agent
+	for _, w := range windows {
+		if !p.isAgentWindow(w) {
+			continue
+		}
+		screen, _ := miaOutput("window", "read", wt, fmt.Sprint(w.Index))
+		key := wt + "\x00" + w.Name
+		before := remembered[key]
+		now := settle(before, classify(string(screen)))
+		if now != before {
+			remembered[key] = now
+			changed = true
+		}
+		found = append(found, agent{Worktree: wt, Window: w.Name, State: shown(now), Quiet: short(w.Quiet)})
+	}
+	if changed {
+		p.remember(remembered)
+	}
+	return found, nil
+}
+
+func (p plugin) everyAgent() ([]agent, error) {
+	out, err := miaOutput("api", "worktrees")
+	if err != nil {
+		return nil, err
+	}
+	var worktrees []struct {
+		Name string `json:"name"`
+	}
+	if err := json.Unmarshal(out, &worktrees); err != nil {
+		return nil, fmt.Errorf("mia api worktrees: %w", err)
+	}
+	var all []agent
+	for _, wt := range worktrees {
+		agents, err := p.agentsIn(wt.Name)
+		if err != nil {
+			continue
+		}
+		all = append(all, agents...)
+	}
+	return all, nil
+}
+
+var waitingMarks = []string{
+	"Do you want to", "Would you like to", "❯ 1. Yes", "› 1. Yes", "(y/n)", "[y/N]", "[Y/n]",
+	"Allow command", "Approve", "Press enter to continue",
+}
+
+var workingMarks = []string{"esc to interrupt", "Esc to interrupt", "ctrl+c to interrupt"}
+
+func classify(screen string) string {
+	var lines []string
+	for _, line := range strings.Split(screen, "\n") {
+		if strings.TrimSpace(line) != "" {
+			lines = append(lines, line)
+		}
+	}
+	if len(lines) > 12 {
+		lines = lines[len(lines)-12:]
+	}
+	bottom := strings.Join(lines, "\n")
+	for _, mark := range waitingMarks {
+		if strings.Contains(bottom, mark) {
+			return waiting
+		}
+	}
+	for _, mark := range workingMarks {
+		if strings.Contains(bottom, mark) {
+			return working
+		}
+	}
+	return idle
+}
+
+func settle(before memory, now string) memory {
+	switch {
+	case now == idle && (before.Last == working || before.Finished):
+		return memory{Last: idle, Finished: true}
+	default:
+		return memory{Last: now}
+	}
+}
+
+func shown(m memory) string {
+	if m.Last == idle && m.Finished {
+		return finished
+	}
+	return m.Last
+}
+
+func (p plugin) see(wt, window string) {
+	remembered := p.recall()
+	key := wt + "\x00" + window
+	if m, ok := remembered[key]; ok && m.Finished {
+		m.Finished = false
+		remembered[key] = m
+		p.remember(remembered)
+	}
+}
+
+func (p plugin) recall() map[string]memory {
+	remembered := map[string]memory{}
+	raw, err := os.ReadFile(p.statePath())
+	if err == nil {
+		_ = json.Unmarshal(raw, &remembered)
+	}
+	return remembered
+}
+
+func (p plugin) remember(remembered map[string]memory) {
+	raw, err := json.Marshal(remembered)
+	if err != nil {
+		return
+	}
+	tmp := p.statePath() + ".tmp"
+	if os.WriteFile(tmp, raw, 0o644) == nil {
+		_ = os.Rename(tmp, p.statePath())
+	}
+}
+
+func short(quiet string) string {
+	d, err := time.ParseDuration(quiet)
+	if err != nil {
+		return quiet
+	}
+	switch {
+	case d < time.Minute:
+		return "now"
+	case d < time.Hour:
+		return fmt.Sprintf("%dm", int(d.Minutes()))
+	case d < 48*time.Hour:
+		return fmt.Sprintf("%dh", int(d.Hours()))
+	}
+	return fmt.Sprintf("%dd", int(d.Hours()/24))
+}

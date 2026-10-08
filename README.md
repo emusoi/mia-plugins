@@ -27,6 +27,25 @@ Records stay where mia-core kept them, under `.git/mia/plans`, `evidence` and
 `lessons`, so existing plans read as they are. Checks run through
 `mia env run`, inside the environment when one is up.
 
+## mia-agent
+
+Coding agents in your worktrees. `mia agent run [worktree] [--task <text>]
+[agent]` starts one in a new window of the worktree's session; `mia agent ls`
+shows every agent and whether it is working, waiting on you, finished or
+idle, read from its screen. `attach`, `send -- <text>` and `stop` take a
+worktree and, when it has more than one agent, a window. Needs mia-core with
+`mia window read` and `send`.
+
+    make build
+    ln -s "$PWD/bin/mia-agent" ~/.config/mia/plugins/mia-agent && mia plugin enable agent
+
+Settings:
+
+    [plugin.agent]
+    default = "claude"                     # what `mia agent run` starts
+    agents = ["claude", "codex", "cursor"]
+    bin = { cursor = "cursor-agent" }      # when the command is not the name
+
 ## mia-dev
 
 Lend the main checkout's already-running dev server a worktree's files,
